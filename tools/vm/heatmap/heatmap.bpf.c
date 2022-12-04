@@ -53,8 +53,8 @@ int probe(unsigned int nid, unsigned long addr, unsigned long len, bool anon)
 	return 0;
 }
 
-SEC("fentry/mglru_pte_probe")
-int BPF_PROG(fentry_mglru_pte_probe, pid_t pid, unsigned int nid,
+SEC("fentry/mglru_ptee_probe")
+int BPF_PROG(fentry_mglru_ptee_probe, pid_t pid, unsigned int nid,
 	     unsigned long addr, unsigned long len, bool anon)
 {
 	int err;
@@ -98,6 +98,7 @@ int BPF_PROG(bpf_mglru_should_skip_mm,
 }
 
 extern int bpf_run_aging(int memcg_id, bool can_swap, bool force_scan) __ksym;
+extern int bpf_inc_min_seq(int memcg_id, bool can_swap, bool force_scan) __ksym;
 
 struct args {
 	int memcg_id;
@@ -108,6 +109,7 @@ int memcg_run_aging(struct args *ctx)
 {
 	int err;
 
+	err = bpf_inc_min_seq(ctx->memcg_id, true, true);
 	err = bpf_run_aging(ctx->memcg_id, true, true);
 
 	if (err != 0) {

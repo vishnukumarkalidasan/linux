@@ -3907,7 +3907,7 @@ static bool suitable_to_scan(int total, int young)
  * __weak noinline guarantees that both the function and the callsite are
  * preserved
  */
-__weak noinline void mglru_pte_probe(pid_t pid, unsigned int nid, unsigned long addr,
+__weak noinline void mglru_ptee_probe(pid_t pid, unsigned int nid, unsigned long addr,
 				     unsigned long len, bool anon)
 {
 
@@ -3975,7 +3975,7 @@ restart:
 			folio_mark_dirty(folio);
 
 		old_gen = folio_update_gen(folio, new_gen);
-		mglru_pte_probe(walk->pid, pgdat->node_id, addr, folio_nr_pages(folio),
+		mglru_ptee_probe(walk->pid, pgdat->node_id, addr, folio_nr_pages(folio),
 				folio_test_anon(folio));
 		if (old_gen >= 0 && old_gen != new_gen)
 			update_batch_size(walk, folio, old_gen, new_gen);
@@ -5656,6 +5656,7 @@ static int run_aging(struct lruvec *lruvec, unsigned long seq, struct scan_contr
 	return 0;
 }
 
+
 static int run_eviction(struct lruvec *lruvec, unsigned long seq, struct scan_control *sc,
 			int swappiness, unsigned long nr_to_reclaim)
 {
@@ -5731,6 +5732,11 @@ done:
 	return err;
 }
 
+int bpf_inc_min_seq(int memcg_id, bool can_swap, bool force_scan) {
+	printk(KERN_INFO"Hello Vishnu from new bpf function\n ");	
+	return 0;
+}
+
 int bpf_run_aging(int memcg_id, bool can_swap,
 			 bool force_scan)
 {
@@ -5797,8 +5803,13 @@ BTF_SET8_END(bpf_lru_gen_trace_kfunc_ids)
 
 BTF_SET8_START(bpf_lru_gen_syscall_kfunc_ids)
 BTF_ID_FLAGS(func, bpf_run_aging)
+BTF_ID_FLAGS(func, bpf_inc_min_seq)
 BTF_SET8_END(bpf_lru_gen_syscall_kfunc_ids)
-
+/*
+BTF_SET8_START(bpf_lru_gen_syscall_kfunc_ids)
+BTF_ID_FLAGS(func, bpf_inc_min_seq)
+BTF_SET8_END(bpf_lru_gen_syscall_kfunc_ids)
+*/
 static const struct btf_kfunc_id_set bpf_lru_gen_trace_kfunc_set = {
 	.owner = THIS_MODULE,
 	.set = &bpf_lru_gen_trace_kfunc_ids,
