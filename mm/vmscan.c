@@ -5732,9 +5732,121 @@ done:
 	return err;
 }
 
-int bpf_inc_min_seq(int memcg_id, bool can_swap, bool force_scan) {
-	printk(KERN_INFO"Hello Vishnu from new bpf function\n ");	
-	return 0;
+int bpf_inc_max_seq(int memcg_id, bool can_swap, bool force_scan) {
+	printk(KERN_INFO"run increase max seq\n ");
+		struct scan_control sc = {
+		.may_writepage = true,
+		.may_unmap = true,
+		.may_swap = true,
+		.reclaim_idx = MAX_NR_ZONES - 1,
+		.gfp_mask = GFP_KERNEL,
+	};
+	int err = -EINVAL;
+	struct mem_cgroup *memcg = NULL;
+	struct blk_plug plug;
+	unsigned int flags;
+	unsigned int nid;
+
+	if (!mem_cgroup_disabled()) {
+		rcu_read_lock();
+		memcg = mem_cgroup_from_id(memcg_id);
+#ifdef CONFIG_MEMCG
+		if (memcg && !css_tryget(&memcg->css))
+			memcg = NULL;
+#endif
+		rcu_read_unlock();
+
+		if (!memcg)
+			return -EINVAL;
+	}
+
+	if (memcg_id != mem_cgroup_id(memcg)) {
+		mem_cgroup_put(memcg);
+		return err;
+	}
+
+	set_task_reclaim_state(current, &sc.reclaim_state);
+	flags = memalloc_noreclaim_save();
+	blk_start_plug(&plug);
+	if (!set_mm_walk(NULL)) {
+		err = -ENOMEM;
+		goto done;
+	}
+
+	for_each_online_node(nid) {
+		struct lruvec *lruvec = get_lruvec(memcg, nid);
+		DEFINE_MAX_SEQ(lruvec);
+
+		err = run_aging(lruvec, max_seq, &sc, can_swap, force_scan);
+		if (err)
+			goto done;
+	}
+done:
+	clear_mm_walk();
+	blk_finish_plug(&plug);
+	memalloc_noreclaim_restore(flags);
+	set_task_reclaim_state(current, NULL);
+	mem_cgroup_put(memcg);
+
+	return err;	
+}
+
+int bpf_handle_sequential(int memcg_id, int swappiness,
+			 int force_scan, int reclaim_nr) {
+	struct scan_control sc = {
+		.may_writepage = true,
+		.may_unmap = true,
+		.may_swap = true,
+		.reclaim_idx = MAX_NR_ZONES - 1,
+		.gfp_mask = GFP_KERNEL,
+	};
+	unsigned int nid;
+	struct lruvec *lruvec;
+	int err = -EINVAL;
+	struct mem_cgroup *memcg = NULL;
+
+	if (nid < 0 || nid >= MAX_NUMNODES || !node_state(nid, N_MEMORY))
+		return -EINVAL;
+
+	if (!mem_cgroup_disabled()) {
+		rcu_read_lock();
+		memcg = mem_cgroup_from_id(memcg_id);
+#ifdef CONFIG_MEMCG
+		if (memcg && !css_tryget(&memcg->css))
+			memcg = NULL;
+#endif
+		rcu_read_unlock();
+
+		if (!memcg)
+			return -EINVAL;
+	}
+
+	if (memcg_id != mem_cgroup_id(memcg))
+		goto done;
+//for_each_online_node(nid) {
+	lruvec = get_lruvec(memcg, nid);
+	//int swappiness = 50;
+	if (swappiness < 0)
+		swappiness = get_swappiness(lruvec, &sc);
+	else if (swappiness > 200)
+		goto done;
+	DEFINE_MAX_SEQ(lruvec);
+	printk("starting aging and eviction for %s \n", __func__);
+	//int force_scan = 0;
+	//int reclaim_nr = 50;
+	err = run_eviction(lruvec, max_seq - 2 , &sc, swappiness, reclaim_nr);
+	if (!err) {
+		//err = run_eviction(lruvec, max_seq - 1 , &sc, swappiness, reclaim_nr);
+		//if (err) {
+			printk("run_eviction failed %s \n", __func__);
+		}
+	//}
+
+done:
+	mem_cgroup_put(memcg);
+
+	return err;			
+
 }
 
 int bpf_run_aging(int memcg_id, bool can_swap,
@@ -5803,7 +5915,8 @@ BTF_SET8_END(bpf_lru_gen_trace_kfunc_ids)
 
 BTF_SET8_START(bpf_lru_gen_syscall_kfunc_ids)
 BTF_ID_FLAGS(func, bpf_run_aging)
-BTF_ID_FLAGS(func, bpf_inc_min_seq)
+BTF_ID_FLAGS(func, bpf_inc_max_seq)
+BTF_ID_FLAGS(func, bpf_handle_sequential)
 BTF_SET8_END(bpf_lru_gen_syscall_kfunc_ids)
 /*
 BTF_SET8_START(bpf_lru_gen_syscall_kfunc_ids)

@@ -4,12 +4,12 @@ include ../../build/Build.include
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-builtin-variables
 
-CC := clang -I/home/vishnu/Projects/kernels/linux/tools/vm/libbpf.a
+CC := clang
 KERNEL_DIR := $(abspath ../../..)
 
 .PHONY: clean all
 
-all: heatmap.user heatmap.skel.h vmlinux.h
+all: xmglru.user xmglru.skel.h vmlinux.h
 
 %.user: %.user.o
 	$(CC) -g -O2 $^ -l:libbpf.a -lelf -lz -o $@
@@ -27,4 +27,4 @@ vmlinux.h: $(KERNEL_DIR)/vmlinux
 	$(CC) -g -O2 -c $*.user.c -o $*.user.o
 
 clean:
-	rm -f *.o heatmap.user *.skel.h vmlinux.h
+	rm -f *.o xmglru.user *.skel.h vmlinux.h
